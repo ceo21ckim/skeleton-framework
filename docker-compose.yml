@@ -1,0 +1,120 @@
+services:
+  db:
+    image: postgres:15-alpine
+    container_name: naver_bidding_db
+    environment:
+      - POSTGRES_DB=$DB_NAME
+      - POSTGRES_USER=$DB_USER
+      - POSTGRES_PASSWORD=$DB_PASSWORD
+    ports:
+      - "3000:5432"
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U $$POSTGRES_USER -d $$POSTGRES_DB"]
+      interval: 5s
+      timeout: 5s
+      retries: 5
+
+  # ==========================================
+  # 👥 DEVELOPER A (sm)
+  # ==========================================
+  backend_sm:
+    build: ./backend
+    container_name: naver_bidding_backend_sm
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend:/app
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=$SECRET_KEY
+      - ALLOWED_HOSTS=*
+      - DB_NAME=$DB_NAME
+      - DB_USER=$DB_USER
+      - DB_PASSWORD=$DB_PASSWORD
+      - DB_HOST=$DB_HOST
+      - DB_PORT=$DB_PORT
+      - NAVER_CUSTOMER_ID=$NAVER_CUSTOMER_ID
+      - NAVER_API_KEY=$NAVER_API_KEY
+      - NAVER_SECRET_KEY=$NAVER_SECRET_KEY
+      - NAVER_API_SECRET=$NAVER_API_SECRET
+    ports:
+      - "${BACK_PORT:-3012}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  webserver_sm:
+    build:
+      context: .
+      dockerfile: ./nginx/Dockerfile
+    container_name: naver_bidding_webserver_sm
+    ports:
+      - "${FRONT_PORT:-3011}:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx/nginx_sm.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend_sm
+
+  ssh_sm:
+    image: naver-bidding-opt-ssh:latest
+    container_name: naver_bidding_ssh_sm
+    ports:
+      - "${SSH_PORT:-3013}:22"
+    volumes:
+      - .:/app # 프로젝트 전체 폴더(skills 포함)를 SSH 컨테이너의 /app 경로로 공유 마운트
+    depends_on:
+      - backend_sm
+
+  # ==========================================
+  # 👥 DEVELOPER B (de)
+  # ==========================================
+  backend_de:
+    build: ./backend
+    container_name: naver_bidding_backend_de
+    command: python manage.py runserver 0.0.0.0:8000
+    volumes:
+      - ./backend:/app
+    environment:
+      - DEBUG=True
+      - SECRET_KEY=$SECRET_KEY
+      - ALLOWED_HOSTS=*
+      - DB_NAME=$DB_NAME
+      - DB_USER=$DB_USER
+      - DB_PASSWORD=$DB_PASSWORD
+      - DB_HOST=$DB_HOST
+      - DB_PORT=$DB_PORT
+      - NAVER_CUSTOMER_ID=$NAVER_CUSTOMER_ID
+      - NAVER_API_KEY=$NAVER_API_KEY
+      - NAVER_SECRET_KEY=$NAVER_SECRET_KEY
+      - NAVER_API_SECRET=$NAVER_API_SECRET
+    ports:
+      - "${BACK_PORT:-3022}:8000"
+    depends_on:
+      db:
+        condition: service_healthy
+
+  webserver_de:
+    image: nginx:1.25-alpine
+    container_name: naver_bidding_webserver_de
+    ports:
+      - "${FRONT_PORT:-3021}:80"
+    volumes:
+      - ./frontend:/usr/share/nginx/html:ro
+      - ./nginx/nginx_de.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      - backend_de
+
+  ssh_de:
+    image: naver-bidding-opt-ssh:latest
+    container_name: naver_bidding_ssh_de
+    ports:
+      - "${SSH_PORT:-3023}:22"
+    volumes:
+      - .:/app # 동일하게 프로젝트 전체 폴더 마운트
+    depends_on:
+      - backend_de
+
+volumes:
+  postgres_data:
